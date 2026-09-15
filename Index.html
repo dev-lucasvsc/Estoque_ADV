@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gerenciador de Estoque</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#171a21; --border:#262b36; --text:#e8eaed;
+    --muted:#8a92a3; --accent:#4f7cff; --accent2:#2fbf71; --danger:#ff5c5c;
+    --warn:#f5a623;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    background:var(--bg); color:var(--text); padding:20px;
+  }
+  h1{font-size:1.4rem; margin:0 0 4px;}
+  .sub{color:var(--muted); font-size:.85rem; margin-bottom:20px;}
+  .grid{display:grid; grid-template-columns: 380px 1fr; gap:20px;}
+  @media (max-width:900px){ .grid{grid-template-columns:1fr;} }
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:16px;
+  }
+  .card h2{font-size:1rem; margin:0 0 12px; color:var(--text);}
+  label{display:block; font-size:.75rem; color:var(--muted); margin:10px 0 4px;}
+  input, select{
+    width:100%; padding:9px 10px; background:#0f1115; border:1px solid var(--border);
+    border-radius:6px; color:var(--text); font-size:.9rem;
+  }
+  input:focus, select:focus{outline:1px solid var(--accent); border-color:var(--accent);}
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  button{
+    cursor:pointer; border:none; border-radius:6px; padding:10px 14px;
+    font-size:.85rem; font-weight:600;
+  }
+  .btn-primary{background:var(--accent); color:#fff; width:100%; margin-top:14px;}
+  .btn-primary:hover{filter:brightness(1.1);}
+  .btn-ghost{background:transparent; border:1px solid var(--border); color:var(--text);}
+  .btn-danger{background:transparent; border:1px solid var(--danger); color:var(--danger); padding:5px 9px; font-size:.75rem;}
+  .btn-warn{background:transparent; border:1px solid var(--warn); color:var(--warn); padding:5px 9px; font-size:.75rem;}
+  .toolbar{display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;}
+  .toolbar input, .toolbar select{width:auto; flex:1; min-width:120px;}
+  table{width:100%; border-collapse:collapse; font-size:.85rem;}
+  th, td{text-align:left; padding:9px 8px; border-bottom:1px solid var(--border);}
+  th{color:var(--muted); font-weight:600; font-size:.75rem; text-transform:uppercase;}
+  tr:hover{background:#1c202a;}
+  .qty{font-weight:700; color:var(--accent2);}
+  .badge{
+    display:inline-block; background:#1c2030; border:1px solid var(--border);
+    padding:2px 8px; border-radius:20px; font-size:.75rem; color:var(--muted);
+  }
+  .actions{display:flex; gap:6px;}
+  .actions button{padding:5px 8px; font-size:.7rem;}
+  .empty{text-align:center; color:var(--muted); padding:30px 0;}
+  .footerbar{display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;}
+  .footerbar button{flex:1;}
+  .stats{display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap;}
+  .stat{background:#0f1115; border:1px solid var(--border); border-radius:8px; padding:10px 14px; flex:1; min-width:120px;}
+  .stat .num{font-size:1.3rem; font-weight:700;}
+  .stat .lbl{font-size:.7rem; color:var(--muted); text-transform:uppercase;}
+  #toast{
+    position:fixed; bottom:20px; right:20px; background:var(--accent2); color:#fff;
+    padding:10px 16px; border-radius:8px; font-size:.85rem; display:none; z-index:99;
+    box-shadow:0 4px 12px rgba(0,0,0,.3);
+  }
+  #fileInput{display:none;}
+  .inline-edit{width:70px; padding:4px 6px; font-size:.8rem;}
+</style>
+</head>
+<body>
+
+<h1>📦 Gerenciador de Estoque</h1>
+<div class="sub">Endereço = Estante + Prateleira. Cadastrar um item já existente no mesmo endereço soma a quantidade.</div>
+
+<div class="grid">
+
+  <!-- FORM -->
+  <div class="card">
+    <h2>Adicionar / Somar item</h2>
+    <label>Nome do item</label>
+    <input id="f-nome" placeholder="Ex: Parafuso M6" list="lista-nomes">
+    <datalist id="lista-nomes"></datalist>
+
+    <div class="row2">
+      <div>
+        <label>Estante</label>
+        <input id="f-estante" placeholder="Ex: A1">
+      </div>
+      <div>
+        <label>Prateleira</label>
+        <input id="f-prateleira" placeholder="Ex: 3">
+      </div>
+    </div>
+
+    <label>Quantidade</label>
+    <input id="f-qtd" type="number" min="1" value="1">
+
+    <label>Código / SKU (opcional)</label>
+    <input id="f-sku" placeholder="Ex: SKU-001">
+
+    <button class="btn-primary" onclick="addItem()">Adicionar / Somar</button>
+
+    <div class="footerbar">
+      <button class="btn-ghost" onclick="document.getElementById('fileInput').click()">⬆ Importar</button>
+      <button class="btn-ghost" onclick="exportJSON()">⬇ Exportar</button>
+    </div>
+    <input type="file" id="fileInput" accept=".json" onchange="importJSON(event)">
+  </div>
+
+  <!-- LISTA -->
+  <div class="card">
+    <h2>Estoque</h2>
+
+    <div class="stats">
+      <div class="stat"><div class="num" id="st-itens">0</div><div class="lbl">Itens distintos</div></div>
+      <div class="stat"><div class="num" id="st-qtd">0</div><div class="lbl">Peças no total</div></div>
+      <div class="stat"><div class="num" id="st-enderecos">0</div><div class="lbl">Endereços ocupados</div></div>
+    </div>
+
+    <div class="toolbar">
+      <input id="busca" placeholder="Buscar por nome, SKU, estante..." oninput="render()">
+      <select id="ordenar" onchange="render()">
+        <option value="nome">Ordenar: Nome</option>
+        <option value="qtd-desc">Ordenar: Qtd (maior)</option>
+        <option value="qtd-asc">Ordenar: Qtd (menor)</option>
+        <option value="endereco">Ordenar: Endereço</option>
+      </select>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>SKU</th>
+          <th>Endereço</th>
+          <th>Qtd</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div id="emptyMsg" class="empty" style="display:none;">Nenhum item cadastrado ainda.</div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const STORAGE_KEY = 'estoque_dados_v1';
+let dados = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+
+function salvar(){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(dados));
+  render();
+}
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(()=> t.style.display='none', 2000);
+}
+
+function chaveItem(nome, estante, prateleira){
+  return (nome.trim().toLowerCase() + '|' + estante.trim().toLowerCase() + '|' + prateleira.trim().toLowerCase());
+}
+
+function addItem(){
+  const nome = document.getElementById('f-nome').value.trim();
+  const estante = document.getElementById('f-estante').value.trim();
+  const prateleira = document.getElementById('f-prateleira').value.trim();
+  const qtd = parseInt(document.getElementById('f-qtd').value) || 0;
+  const sku = document.getElementById('f-sku').value.trim();
+
+  if(!nome || !estante || !prateleira || qtd <= 0){
+    toast('Preencha nome, estante, prateleira e quantidade > 0');
+    return;
+  }
+
+  const chave = chaveItem(nome, estante, prateleira);
+  const existente = dados.find(i => chaveItem(i.nome, i.estante, i.prateleira) === chave);
+
+  if(existente){
+    existente.qtd += qtd;
+    if(sku) existente.sku = sku;
+    toast(`+${qtd} somado a "${nome}" (${estante}/${prateleira}). Total: ${existente.qtd}`);
+  } else {
+    dados.push({
+      id: Date.now() + Math.random().toString(16).slice(2),
+      nome, estante, prateleira, qtd, sku
+    });
+    toast(`"${nome}" cadastrado em ${estante}/${prateleira}`);
+  }
+
+  document.getElementById('f-nome').value = '';
+  document.getElementById('f-estante').value = '';
+  document.getElementById('f-prateleira').value = '';
+  document.getElementById('f-qtd').value = '1';
+  document.getElementById('f-sku').value = '';
+  document.getElementById('f-nome').focus();
+
+  salvar();
+}
+
+function ajustarQtd(id, delta){
+  const item = dados.find(i => i.id === id);
+  if(!item) return;
+  item.qtd += delta;
+  if(item.qtd <= 0){
+    if(confirm(`Quantidade zerada. Remover "${item.nome}" do endereço ${item.estante}/${item.prateleira}?`)){
+      dados = dados.filter(i => i.id !== id);
+    } else {
+      item.qtd = 0;
+    }
+  }
+  salvar();
+}
+
+function editarQtdDireta(id, valor){
+  const item = dados.find(i => i.id === id);
+  if(!item) return;
+  const v = parseInt(valor);
+  if(isNaN(v) || v < 0) return;
+  item.qtd = v;
+  salvar();
+}
+
+function removerItem(id){
+  const item = dados.find(i => i.id === id);
+  if(!item) return;
+  if(confirm(`Remover "${item.nome}" (${item.estante}/${item.prateleira}) do estoque?`)){
+    dados = dados.filter(i => i.id !== id);
+    salvar();
+  }
+}
+
+function exportJSON(){
+  const blob = new Blob([JSON.stringify(dados, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `estoque_backup_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Backup exportado');
+}
+
+function importJSON(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try{
+      const novo = JSON.parse(e.target.result);
+      if(!Array.isArray(novo)) throw new Error();
+      if(dados.length > 0 && !confirm('Isso vai SUBSTITUIR os dados atuais pelos do arquivo. Continuar?')) return;
+      dados = novo;
+      salvar();
+      toast('Dados importados com sucesso');
+    }catch(err){
+      alert('Arquivo inválido.');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+function render(){
+  const busca = document.getElementById('busca').value.trim().toLowerCase();
+  const ordem = document.getElementById('ordenar').value;
+  const tbody = document.getElementById('tbody');
+  const emptyMsg = document.getElementById('emptyMsg');
+
+  let lista = dados.filter(i =>
+    !busca ||
+    i.nome.toLowerCase().includes(busca) ||
+    (i.sku||'').toLowerCase().includes(busca) ||
+    i.estante.toLowerCase().includes(busca) ||
+    i.prateleira.toLowerCase().includes(busca)
+  );
+
+  if(ordem === 'nome') lista.sort((a,b)=> a.nome.localeCompare(b.nome));
+  if(ordem === 'qtd-desc') lista.sort((a,b)=> b.qtd - a.qtd);
+  if(ordem === 'qtd-asc') lista.sort((a,b)=> a.qtd - b.qtd);
+  if(ordem === 'endereco') lista.sort((a,b)=> (a.estante+a.prateleira).localeCompare(b.estante+b.prateleira));
+
+  tbody.innerHTML = '';
+  emptyMsg.style.display = lista.length === 0 ? 'block' : 'none';
+
+  lista.forEach(item => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${escapeHtml(item.nome)}</strong></td>
+      <td><span class="badge">${escapeHtml(item.sku||'-')}</span></td>
+      <td><span class="badge">${escapeHtml(item.estante)} / ${escapeHtml(item.prateleira)}</span></td>
+      <td>
+        <div class="actions">
+          <button class="btn-ghost" style="padding:3px 8px;" onclick="ajustarQtd('${item.id}', -1)">−</button>
+          <input class="inline-edit qty" type="number" value="${item.qtd}" onchange="editarQtdDireta('${item.id}', this.value)">
+          <button class="btn-ghost" style="padding:3px 8px;" onclick="ajustarQtd('${item.id}', 1)">+</button>
+        </div>
+      </td>
+      <td>
+        <button class="btn-danger" onclick="removerItem('${item.id}')">Remover</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  // stats
+  document.getElementById('st-itens').textContent = dados.length;
+  document.getElementById('st-qtd').textContent = dados.reduce((s,i)=> s + i.qtd, 0);
+  const enderecos = new Set(dados.map(i => i.estante.toLowerCase()+'/'+i.prateleira.toLowerCase()));
+  document.getElementById('st-enderecos').textContent = enderecos.size;
+
+  // datalist de nomes para autocomplete
+  const dl = document.getElementById('lista-nomes');
+  dl.innerHTML = '';
+  const nomesUnicos = [...new Set(dados.map(i=>i.nome))];
+  nomesUnicos.forEach(n=>{
+    const opt = document.createElement('option');
+    opt.value = n;
+    dl.appendChild(opt);
+  });
+}
+
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, m => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[m]));
+}
+
+render();
+</script>
+
+</body>
+</html>
