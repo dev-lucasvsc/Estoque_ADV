@@ -104,7 +104,11 @@
 
     <div class="footerbar">
       <button class="btn-ghost" onclick="document.getElementById('fileInput').click()">⬆ Importar</button>
-      <button class="btn-ghost" onclick="exportJSON()">⬇ Exportar</button>
+      <button class="btn-ghost" onclick="exportJSON()">⬇ Backup JSON</button>
+    </div>
+    <div class="footerbar">
+      <button class="btn-ghost" onclick="exportarPDF()">📄 Exportar PDF</button>
+      <button class="btn-ghost" onclick="exportarWord()">📝 Exportar Word</button>
     </div>
     <input type="file" id="fileInput" accept=".json" onchange="importJSON(event)">
   </div>
@@ -188,6 +192,22 @@ function addItem(){
     if(sku) existente.sku = sku;
     toast(`+${qtd} somado a "${nome}" (${estante}/${prateleira}). Total: ${existente.qtd}`);
   } else {
+    // checa se o mesmo item já existe em OUTRO endereço
+    const nomeNorm = nome.trim().toLowerCase();
+    const outrosLocais = dados.filter(i => i.nome.trim().toLowerCase() === nomeNorm);
+
+    if(outrosLocais.length > 0){
+      const lista = outrosLocais.map(i => `• ${i.estante}/${i.prateleira} (qtd: ${i.qtd})`).join('\n');
+      const confirmar = confirm(
+        `"${nome}" já está cadastrado em outro(s) endereço(s):\n\n${lista}\n\n` +
+        `Deseja mesmo cadastrar um NOVO local (${estante}/${prateleira}) para este item?`
+      );
+      if(!confirmar){
+        toast('Cadastro cancelado');
+        return;
+      }
+    }
+
     dados.push({
       id: Date.now() + Math.random().toString(16).slice(2),
       nome, estante, prateleira, qtd, sku
@@ -225,6 +245,51 @@ function editarQtdDireta(id, valor){
   const v = parseInt(valor);
   if(isNaN(v) || v < 0) return;
   item.qtd = v;
+  salvar();
+}
+
+function editarEndereco(id){
+  const item = dados.find(i => i.id === id);
+  if(!item) return;
+
+  const novaEstante = prompt('Nova estante:', item.estante);
+  if(novaEstante === null) return; // cancelou
+  const novaPrateleira = prompt('Nova prateleira:', item.prateleira);
+  if(novaPrateleira === null) return;
+
+  const estanteT = novaEstante.trim();
+  const prateleiraT = novaPrateleira.trim();
+  if(!estanteT || !prateleiraT){
+    toast('Estante e prateleira não podem ficar vazias');
+    return;
+  }
+
+  const chaveNova = chaveItem(item.nome, estanteT, prateleiraT);
+  const chaveAtual = chaveItem(item.nome, item.estante, item.prateleira);
+
+  if(chaveNova === chaveAtual){
+    toast('Endereço sem alteração');
+    return;
+  }
+
+  // já existe o mesmo item no endereço de destino? oferece fundir quantidades
+  const destino = dados.find(i => i.id !== id && chaveItem(i.nome, i.estante, i.prateleira) === chaveNova);
+
+  if(destino){
+    const fundir = confirm(
+      `Já existe "${item.nome}" em ${estanteT}/${prateleiraT} (qtd: ${destino.qtd}).\n\n` +
+      `Deseja somar a quantidade (${item.qtd}) a esse local e remover o registro antigo?`
+    );
+    if(!fundir) return;
+    destino.qtd += item.qtd;
+    dados = dados.filter(i => i.id !== id);
+    toast(`Quantidades somadas em ${estanteT}/${prateleiraT}`);
+  } else {
+    item.estante = estanteT;
+    item.prateleira = prateleiraT;
+    toast(`Endereço atualizado para ${estanteT}/${prateleiraT}`);
+  }
+
   salvar();
 }
 
@@ -268,6 +333,78 @@ function importJSON(event){
   event.target.value = '';
 }
 
+function gerarHTMLRelatorio(){
+  const lista = [...dados].sort((a,b)=> (a.estante+a.prateleira+a.nome).localeCompare(b.estante+b.prateleira+b.nome));
+  const dataStr = new Date().toLocaleString('pt-BR');
+  const totalPecas = lista.reduce((s,i)=> s + i.qtd, 0);
+  const enderecos = new Set(lista.map(i => i.estante.toLowerCase()+'/'+i.prateleira.toLowerCase()));
+
+  const linhas = lista.map(i => `
+    <tr>
+      <td>${escapeHtml(i.estante)}</td>
+      <td>${escapeHtml(i.prateleira)}</td>
+      <td>${escapeHtml(i.nome)}</td>
+      <td>${escapeHtml(i.sku||'-')}</td>
+      <td style="text-align:center;"><b>${i.qtd}</b></td>
+    </tr>
+  `).join('');
+
+  return `
+  <html>
+  <head>
+  <meta charset="UTF-8">
+  <title>Relatório de Estoque</title>
+  <style>
+    body{ font-family: Arial, sans-serif; color:#111; padding:30px; }
+    h1{ font-size:20px; margin-bottom:2px; }
+    .meta{ color:#555; font-size:12px; margin-bottom:18px; }
+    .resumo{ display:flex; gap:20px; margin-bottom:20px; }
+    .resumo div{ border:1px solid #ccc; border-radius:6px; padding:8px 14px; font-size:12px; }
+    .resumo b{ display:block; font-size:16px; }
+    table{ width:100%; border-collapse:collapse; font-size:12px; }
+    th, td{ border:1px solid #ccc; padding:6px 8px; text-align:left; }
+    th{ background:#f0f0f0; }
+  </style>
+  </head>
+  <body>
+    <h1>Relatório de Estoque</h1>
+    <div class="meta">Gerado em ${dataStr}</div>
+    <div class="resumo">
+      <div><b>${lista.length}</b>Itens distintos</div>
+      <div><b>${totalPecas}</b>Peças no total</div>
+      <div><b>${enderecos.size}</b>Endereços ocupados</div>
+    </div>
+    <table>
+      <thead>
+        <tr><th>Estante</th><th>Prateleira</th><th>Item</th><th>SKU</th><th>Qtd</th></tr>
+      </thead>
+      <tbody>${linhas || '<tr><td colspan="5">Nenhum item cadastrado</td></tr>'}</tbody>
+    </table>
+  </body>
+  </html>`;
+}
+
+function exportarPDF(){
+  const html = gerarHTMLRelatorio();
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+  // dá tempo do navegador renderizar antes de abrir o diálogo de impressão
+  setTimeout(()=> win.print(), 300);
+}
+
+function exportarWord(){
+  const html = gerarHTMLRelatorio();
+  const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `relatorio_estoque_${new Date().toISOString().slice(0,10)}.doc`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Relatório Word exportado');
+}
+
 function render(){
   const busca = document.getElementById('busca').value.trim().toLowerCase();
   const ordem = document.getElementById('ordenar').value;
@@ -304,7 +441,10 @@ function render(){
         </div>
       </td>
       <td>
-        <button class="btn-danger" onclick="removerItem('${item.id}')">Remover</button>
+        <div class="actions">
+          <button class="btn-warn" onclick="editarEndereco('${item.id}')">Editar local</button>
+          <button class="btn-danger" onclick="removerItem('${item.id}')">Remover</button>
+        </div>
       </td>
     `;
     tbody.appendChild(tr);
