@@ -4,97 +4,158 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerenciador de Estoque</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root{
-    --bg:#0f1115; --card:#171a21; --border:#262b36; --text:#e8eaed;
-    --muted:#8a92a3; --accent:#4f7cff; --accent2:#2fbf71; --danger:#ff5c5c;
-    --warn:#f5a623;
+    --bg:#0b0d10; --card:#14171c; --border:#23272f; --text:#ebeef1;
+    --muted:#767e8c; --accent:#ff6a2b; --accent2:#35c48c; --danger:#ff5461;
+    --radius:8px;
   }
   *{box-sizing:border-box;}
   body{
-    margin:0; font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;
-    background:var(--bg); color:var(--text); padding:20px;
+    margin:0; font-family:'Inter',-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    background:var(--bg); color:var(--text); padding:24px; font-size:15px; line-height:1.4;
   }
-  h1{font-size:1.4rem; margin:0 0 4px;}
-  .sub{color:var(--muted); font-size:.85rem; margin-bottom:20px;}
+  .mono{ font-family:'JetBrains Mono', ui-monospace, monospace; }
+
+  header.app{
+    display:flex; align-items:baseline; justify-content:space-between; gap:12px;
+    margin-bottom:22px; padding-bottom:14px; border-bottom:1px solid var(--border); flex-wrap:wrap;
+  }
+  header.app h1{
+    font-family:'JetBrains Mono',monospace; font-size:1rem; font-weight:700;
+    letter-spacing:.14em; text-transform:uppercase; margin:0; display:flex; align-items:center; gap:8px;
+  }
+  header.app h1 .dot{ width:7px; height:7px; border-radius:50%; background:var(--accent); }
+  header.app .tagline{ color:var(--muted); font-size:.78rem; }
+
   .grid{display:grid; grid-template-columns: 380px 1fr; gap:20px;}
-  @media (max-width:900px){ .grid{grid-template-columns:1fr;} }
-  .card{
-    background:var(--card); border:1px solid var(--border); border-radius:10px;
-    padding:16px;
+  @media (max-width:900px){ .grid{grid-template-columns:1fr;} body{padding:16px;} }
+
+  .card{ background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:18px; }
+  .card h2{
+    font-family:'JetBrains Mono',monospace; font-size:.72rem; font-weight:700;
+    letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin:0 0 14px;
   }
-  .card h2{font-size:1rem; margin:0 0 12px; color:var(--text);}
-  label{display:block; font-size:.75rem; color:var(--muted); margin:10px 0 4px;}
+
+  label{ display:block; font-size:.72rem; color:var(--muted); margin:12px 0 5px; }
+  label:first-of-type{ margin-top:0; }
   input, select{
-    width:100%; padding:9px 10px; background:#0f1115; border:1px solid var(--border);
-    border-radius:6px; color:var(--text); font-size:.9rem;
+    width:100%; padding:10px 11px; background:var(--bg); border:1px solid var(--border);
+    border-radius:6px; color:var(--text); font-size:.9rem; font-family:inherit;
+    transition:border-color .15s ease;
   }
-  input:focus, select:focus{outline:1px solid var(--accent); border-color:var(--accent);}
+  #f-sku{ font-family:'JetBrains Mono',monospace; }
+  input:focus, select:focus{ outline:none; border-color:var(--accent); }
   .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+
   button{
     cursor:pointer; border:none; border-radius:6px; padding:10px 14px;
-    font-size:.85rem; font-weight:600;
+    font-size:.82rem; font-weight:600; font-family:inherit;
+    transition:filter .15s ease, border-color .15s ease;
   }
-  .btn-primary{background:var(--accent); color:#fff; width:100%; margin-top:14px;}
-  .btn-primary:hover{filter:brightness(1.1);}
-  .btn-ghost{background:transparent; border:1px solid var(--border); color:var(--text);}
-  .btn-danger{background:transparent; border:1px solid var(--danger); color:var(--danger); padding:5px 9px; font-size:.75rem;}
-  .btn-warn{background:transparent; border:1px solid var(--warn); color:var(--warn); padding:5px 9px; font-size:.75rem;}
-  .toolbar{display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;}
+  .btn-primary{ background:var(--accent); color:#1a0900; width:100%; margin-top:16px; font-weight:700; }
+  .btn-primary:hover{ filter:brightness(1.08); }
+  .btn{ background:transparent; border:1px solid var(--border); color:var(--text); }
+  .btn:hover{ border-color:var(--muted); }
+  .btn-danger-ghost{ background:transparent; border:1px solid var(--border); color:var(--danger); }
+  .btn-danger-ghost:hover{ border-color:var(--danger); }
+
+  .icon-btn{
+    width:30px; height:30px; padding:0; display:inline-flex; align-items:center; justify-content:center;
+    background:transparent; border:1px solid var(--border); color:var(--text); font-size:.9rem; border-radius:6px;
+  }
+  .icon-btn:hover{ border-color:var(--muted); }
+  .icon-btn.danger{ color:var(--danger); }
+  .icon-btn.danger:hover{ border-color:var(--danger); }
+
+  details.more{ margin-top:16px; border-top:1px dashed var(--border); padding-top:12px; }
+  details.more summary{
+    cursor:pointer; font-size:.72rem; color:var(--muted); letter-spacing:.06em; text-transform:uppercase;
+    list-style:none; display:flex; align-items:center; gap:6px;
+  }
+  details.more summary::-webkit-details-marker{ display:none; }
+  details.more summary::before{ content:'+'; font-family:'JetBrains Mono',monospace; color:var(--accent); font-weight:700; }
+  details.more[open] summary::before{ content:'−'; }
+  details.more .hint{ font-size:.72rem; color:var(--muted); margin:10px 0; }
+  .action-row{ display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .action-row button{ flex:1; min-width:120px; }
+
+  .toolbar{display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;}
   .toolbar input, .toolbar select{width:auto; flex:1; min-width:120px;}
-  table{width:100%; border-collapse:collapse; font-size:.85rem;}
-  th, td{text-align:left; padding:9px 8px; border-bottom:1px solid var(--border);}
-  th{color:var(--muted); font-weight:600; font-size:.75rem; text-transform:uppercase;}
-  tr:hover{background:#1c202a;}
-  .qty{font-weight:700; color:var(--accent2);}
-  .badge{
-    display:inline-block; background:#1c2030; border:1px solid var(--border);
-    padding:2px 8px; border-radius:20px; font-size:.75rem; color:var(--muted);
+
+  table{width:100%; border-collapse:collapse; font-size:.86rem;}
+  th, td{text-align:left; padding:10px 8px; border-bottom:1px solid var(--border); vertical-align:middle;}
+  th{
+    color:var(--muted); font-weight:600; font-size:.64rem; text-transform:uppercase;
+    letter-spacing:.08em; font-family:'JetBrains Mono',monospace;
   }
-  .actions{display:flex; gap:6px;}
-  .actions button{padding:5px 8px; font-size:.7rem;}
-  .empty{text-align:center; color:var(--muted); padding:30px 0;}
-  .footerbar{display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;}
-  .footerbar button{flex:1;}
-  .stats{display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap;}
-  .stat{background:#0f1115; border:1px solid var(--border); border-radius:8px; padding:10px 14px; flex:1; min-width:120px;}
-  .stat .num{font-size:1.3rem; font-weight:700;}
-  .stat .lbl{font-size:.7rem; color:var(--muted); text-transform:uppercase;}
+  tr:hover td{background:rgba(255,255,255,.02);}
+  .item-name{ font-weight:600; }
+  .item-sku{ display:block; font-family:'JetBrains Mono',monospace; font-size:.72rem; color:var(--muted); margin-top:2px; }
+
+  .tag{
+    display:inline-flex; align-items:center; font-family:'JetBrains Mono',monospace;
+    font-size:.76rem; border:1px solid var(--border); border-left:3px solid var(--accent);
+    border-radius:4px; padding:3px 8px; background:rgba(255,106,43,.06); white-space:nowrap;
+  }
+
+  .qty-cell{ display:flex; align-items:center; gap:6px; }
+  .qty-cell .icon-btn{ width:26px; height:26px; font-size:.85rem; }
+  .qty-input{ width:52px; padding:5px 4px; font-family:'JetBrains Mono',monospace; font-weight:700; text-align:center; color:var(--accent2); }
+
+  .row-actions{ display:flex; gap:6px; justify-content:flex-end; }
+
+  .empty{ text-align:center; color:var(--muted); padding:40px 0; font-size:.85rem; }
+
+  .stats{ display:flex; margin-bottom:18px; border-top:1px dashed var(--border); border-bottom:1px dashed var(--border); }
+  .stat{ flex:1; padding:12px 4px; text-align:center; border-left:1px dashed var(--border); }
+  .stat:first-child{ border-left:none; }
+  .stat .num{ font-family:'JetBrains Mono',monospace; font-size:1.25rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .stat .lbl{ font-size:.6rem; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; margin-top:2px; }
+
+  .base-status{ font-family:'JetBrains Mono',monospace; font-size:.72rem; color:var(--muted); margin:6px 0 0; }
+  .base-status.on{ color:var(--accent2); }
+
   #toast{
-    position:fixed; bottom:20px; right:20px; background:var(--accent2); color:#fff;
-    padding:10px 16px; border-radius:8px; font-size:.85rem; display:none; z-index:99;
-    box-shadow:0 4px 12px rgba(0,0,0,.3);
+    position:fixed; bottom:20px; right:20px; background:var(--card); border:1px solid var(--accent2); color:var(--text);
+    padding:10px 16px; border-radius:6px; font-size:.82rem; display:none; z-index:99;
+    box-shadow:0 8px 24px rgba(0,0,0,.4); font-family:'JetBrains Mono',monospace;
   }
   #fileInput{display:none;}
-  .inline-edit{width:70px; padding:4px 6px; font-size:.8rem;}
+
   .sugestoes-box{
     position:relative; margin-top:4px; max-height:220px; overflow-y:auto;
-    border:1px solid var(--border); border-radius:6px; background:#0f1115;
+    border:1px solid var(--border); border-radius:6px; background:var(--bg);
   }
-  .sugestao-item{
-    padding:8px 10px; font-size:.8rem; cursor:pointer; border-bottom:1px solid var(--border);
-  }
+  .sugestao-item{ padding:9px 10px; font-size:.78rem; cursor:pointer; border-bottom:1px solid var(--border); display:flex; gap:8px; }
   .sugestao-item:last-child{border-bottom:none;}
-  .sugestao-item:hover{background:#1c202a;}
-  .sugestao-item b{color:var(--accent);}
+  .sugestao-item:hover{background:rgba(255,255,255,.03);}
+  .sugestao-item b{ color:var(--accent); font-family:'JetBrains Mono',monospace; font-size:.76rem; flex-shrink:0; }
+
+  @media (prefers-reduced-motion: reduce){ *{transition:none !important;} }
 </style>
 </head>
 <body>
 
-<h1>📦 Gerenciador de Estoque</h1>
-<div class="sub">Endereço = Estante + Prateleira. Cadastrar um item já existente no mesmo endereço soma a quantidade.</div>
+<header class="app">
+  <h1><span class="dot"></span>Estoque</h1>
+  <div class="tagline">Estante / Prateleira — contagem e catalogação</div>
+</header>
 
 <div class="grid">
 
   <!-- FORM -->
   <div class="card">
-    <h2>Adicionar / Somar item</h2>
+    <h2>Adicionar item</h2>
 
-    <label>Código / SKU (bipar ou digitar) ou parte do nome</label>
-    <input id="f-sku" placeholder="Ex: 7891234567890 ou SPTO794 ou CHAPAM" oninput="handleBuscaSku()" autocomplete="off">
+    <label>Código (bipar ou digitar)</label>
+    <input id="f-sku" placeholder="Código, SKU ou parte do nome" oninput="handleBuscaSku()" autocomplete="off">
     <div id="sugestoes" class="sugestoes-box" style="display:none;"></div>
-    <div id="baseStatus" class="sub" style="margin:4px 0 0;"></div>
+    <div id="baseStatus" class="base-status"></div>
 
     <label>Nome do item</label>
     <input id="f-nome" placeholder="Ex: Parafuso M6" list="lista-nomes" oninput="handleBuscaNome()" autocomplete="off">
@@ -103,37 +164,41 @@
     <div class="row2">
       <div>
         <label>Estante</label>
-        <input id="f-estante" placeholder="Ex: A1">
+        <input id="f-estante" placeholder="A1">
       </div>
       <div>
         <label>Prateleira</label>
-        <input id="f-prateleira" placeholder="Ex: 3">
+        <input id="f-prateleira" placeholder="3">
       </div>
     </div>
 
     <label>Quantidade</label>
-    <input id="f-qtd" type="number" min="1" value="1">
+    <input id="f-qtd" type="number" min="1" value="1" class="mono">
 
-    <button class="btn-primary" onclick="addItem()">Adicionar / Somar</button>
+    <button class="btn-primary" onclick="addItem()">Adicionar / somar</button>
 
-    <div class="footerbar">
-      <button class="btn-ghost" onclick="document.getElementById('fileInput').click()">⬆ Importar</button>
-      <button class="btn-ghost" onclick="exportJSON()">⬇ Backup JSON</button>
-    </div>
-    <div class="footerbar">
-      <button class="btn-ghost" onclick="exportarPDF()">📄 Exportar PDF</button>
-      <button class="btn-ghost" onclick="exportarWord()">📝 Exportar Word</button>
-    </div>
-    <input type="file" id="fileInput" accept=".json" onchange="importJSON(event)">
+    <details class="more">
+      <summary>Backup e relatórios</summary>
+      <div class="action-row">
+        <button class="btn" onclick="document.getElementById('fileInput').click()">Importar</button>
+        <button class="btn" onclick="exportJSON()">Backup JSON</button>
+      </div>
+      <div class="action-row">
+        <button class="btn" onclick="exportarPDF()">Exportar PDF</button>
+        <button class="btn" onclick="exportarWord()">Exportar Word</button>
+      </div>
+      <input type="file" id="fileInput" accept=".json" onchange="importJSON(event)">
+    </details>
 
-    <hr style="border-color:var(--border); margin:16px 0;">
-    <h2>Base de dados (XLSX)</h2>
-    <div class="sub" style="margin-bottom:8px;">
-      Planilha com colunas <b>Código Produto</b>, <b>Código Auxiliar</b> (opcional) e <b>Descrição Completa</b>. Ao bipar/digitar qualquer um dos dois códigos, o nome é preenchido automaticamente.
-    </div>
-    <button class="btn-ghost" style="width:100%;" onclick="document.getElementById('baseInput').click()">📥 Carregar planilha de itens</button>
-    <input type="file" id="baseInput" accept=".xlsx,.xls" style="display:none;" onchange="importarBaseXLSX(event)">
-    <button class="btn-ghost" style="width:100%; margin-top:8px;" onclick="limparBase()">🗑 Limpar base carregada</button>
+    <details class="more">
+      <summary>Base de produtos (XLSX)</summary>
+      <div class="hint">Colunas: Código Produto, Código Auxiliar, Descrição Completa.</div>
+      <div class="action-row">
+        <button class="btn" onclick="document.getElementById('baseInput').click()">Carregar planilha</button>
+        <button class="btn btn-danger-ghost" onclick="limparBase()">Limpar base</button>
+      </div>
+      <input type="file" id="baseInput" accept=".xlsx,.xls" style="display:none;" onchange="importarBaseXLSX(event)">
+    </details>
   </div>
 
   <!-- LISTA -->
@@ -141,18 +206,18 @@
     <h2>Estoque</h2>
 
     <div class="stats">
-      <div class="stat"><div class="num" id="st-itens">0</div><div class="lbl">Itens distintos</div></div>
-      <div class="stat"><div class="num" id="st-qtd">0</div><div class="lbl">Peças no total</div></div>
-      <div class="stat"><div class="num" id="st-enderecos">0</div><div class="lbl">Endereços ocupados</div></div>
+      <div class="stat"><div class="num" id="st-itens">0</div><div class="lbl">Itens</div></div>
+      <div class="stat"><div class="num" id="st-qtd">0</div><div class="lbl">Peças</div></div>
+      <div class="stat"><div class="num" id="st-enderecos">0</div><div class="lbl">Endereços</div></div>
     </div>
 
     <div class="toolbar">
-      <input id="busca" placeholder="Buscar por nome, SKU, estante..." oninput="render()">
+      <input id="busca" placeholder="Buscar item, código ou endereço" oninput="render()">
       <select id="ordenar" onchange="render()">
-        <option value="nome">Ordenar: Nome</option>
-        <option value="qtd-desc">Ordenar: Qtd (maior)</option>
-        <option value="qtd-asc">Ordenar: Qtd (menor)</option>
-        <option value="endereco">Ordenar: Endereço</option>
+        <option value="nome">Nome</option>
+        <option value="qtd-desc">Qtd ↓</option>
+        <option value="qtd-asc">Qtd ↑</option>
+        <option value="endereco">Endereço</option>
       </select>
     </div>
 
@@ -160,7 +225,6 @@
       <thead>
         <tr>
           <th>Item</th>
-          <th>SKU</th>
           <th>Endereço</th>
           <th>Qtd</th>
           <th></th>
@@ -263,9 +327,13 @@ function limparBase(){
 
 function atualizarBaseStatus(){
   const el = document.getElementById('baseStatus');
-  el.textContent = baseItens.length > 0
-    ? `✓ Base carregada: ${baseItens.length} itens`
-    : 'Nenhuma base carregada — o nome deve ser digitado manualmente.';
+  if(baseItens.length > 0){
+    el.textContent = `● base ativa — ${baseItens.length} itens`;
+    el.classList.add('on');
+  } else {
+    el.textContent = '○ nenhuma base carregada';
+    el.classList.remove('on');
+  }
 }
 
 function normalizarTexto(v){
@@ -608,20 +676,22 @@ function render(){
   lista.forEach(item => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><strong>${escapeHtml(item.nome)}</strong></td>
-      <td><span class="badge">${escapeHtml(item.sku||'-')}</span></td>
-      <td><span class="badge">${escapeHtml(item.estante)} / ${escapeHtml(item.prateleira)}</span></td>
       <td>
-        <div class="actions">
-          <button class="btn-ghost" style="padding:3px 8px;" onclick="ajustarQtd('${item.id}', -1)">−</button>
-          <input class="inline-edit qty" type="number" value="${item.qtd}" onchange="editarQtdDireta('${item.id}', this.value)">
-          <button class="btn-ghost" style="padding:3px 8px;" onclick="ajustarQtd('${item.id}', 1)">+</button>
+        <div class="item-name">${escapeHtml(item.nome)}</div>
+        ${item.sku ? `<span class="item-sku">${escapeHtml(item.sku)}</span>` : ''}
+      </td>
+      <td><span class="tag">${escapeHtml(item.estante)}/${escapeHtml(item.prateleira)}</span></td>
+      <td>
+        <div class="qty-cell">
+          <button class="icon-btn" onclick="ajustarQtd('${item.id}', -1)" title="Diminuir">−</button>
+          <input class="qty-input" type="number" value="${item.qtd}" onchange="editarQtdDireta('${item.id}', this.value)">
+          <button class="icon-btn" onclick="ajustarQtd('${item.id}', 1)" title="Aumentar">+</button>
         </div>
       </td>
       <td>
-        <div class="actions">
-          <button class="btn-warn" onclick="editarItem('${item.id}')">Editar item</button>
-          <button class="btn-danger" onclick="removerItem('${item.id}')">Remover</button>
+        <div class="row-actions">
+          <button class="icon-btn" onclick="editarItem('${item.id}')" title="Editar item">✎</button>
+          <button class="icon-btn danger" onclick="removerItem('${item.id}')" title="Remover">✕</button>
         </div>
       </td>
     `;
