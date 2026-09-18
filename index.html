@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerenciador de Estoque</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root{
     --bg:#0f1115; --card:#171a21; --border:#262b36; --text:#e8eaed;
@@ -79,6 +80,11 @@
   <!-- FORM -->
   <div class="card">
     <h2>Adicionar / Somar item</h2>
+
+    <label>Código / SKU (bipar ou digitar)</label>
+    <input id="f-sku" placeholder="Ex: 7891234567890" oninput="autoPreencherPorCodigo()">
+    <div id="baseStatus" class="sub" style="margin:4px 0 0;"></div>
+
     <label>Nome do item</label>
     <input id="f-nome" placeholder="Ex: Parafuso M6" list="lista-nomes">
     <datalist id="lista-nomes"></datalist>
@@ -97,9 +103,6 @@
     <label>Quantidade</label>
     <input id="f-qtd" type="number" min="1" value="1">
 
-    <label>Código / SKU (opcional)</label>
-    <input id="f-sku" placeholder="Ex: SKU-001">
-
     <button class="btn-primary" onclick="addItem()">Adicionar / Somar</button>
 
     <div class="footerbar">
@@ -111,6 +114,15 @@
       <button class="btn-ghost" onclick="exportarWord()">📝 Exportar Word</button>
     </div>
     <input type="file" id="fileInput" accept=".json" onchange="importJSON(event)">
+
+    <hr style="border-color:var(--border); margin:16px 0;">
+    <h2>Base de dados (XLSX)</h2>
+    <div class="sub" style="margin-bottom:8px;">
+      Planilha com colunas <b>Código Produto</b>, <b>Código Auxiliar</b> (opcional) e <b>Descrição Completa</b>. Ao bipar/digitar qualquer um dos dois códigos, o nome é preenchido automaticamente.
+    </div>
+    <button class="btn-ghost" style="width:100%;" onclick="document.getElementById('baseInput').click()">📥 Carregar planilha de itens</button>
+    <input type="file" id="baseInput" accept=".xlsx,.xls" style="display:none;" onchange="importarBaseXLSX(event)">
+    <button class="btn-ghost" style="width:100%; margin-top:8px;" onclick="limparBase()">🗑 Limpar base carregada</button>
   </div>
 
   <!-- LISTA -->
@@ -170,6 +182,88 @@ function toast(msg){
 
 function chaveItem(nome, estante, prateleira){
   return (nome.trim().toLowerCase() + '|' + estante.trim().toLowerCase() + '|' + prateleira.trim().toLowerCase());
+}
+
+const BASE_KEY = 'estoque_base_xlsx_v1';
+let baseItens = JSON.parse(localStorage.getItem(BASE_KEY) || '[]');
+atualizarBaseStatus();
+
+function normalizarCabecalho(h){
+  return String(h).trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // remove acentos
+}
+
+function importarBaseXLSX(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try{
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const linhas = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+      if(linhas.length === 0){
+        alert('Planilha vazia.');
+        return;
+      }
+
+      const colunas = Object.keys(linhas[0]);
+      const acharColuna = (opcoes) => colunas.find(c => opcoes.includes(normalizarCabecalho(c)));
+
+      const colCodProduto = acharColuna(['codigo produto','codigo','sku','cod']);
+      const colCodAuxiliar = acharColuna(['codigo auxiliar','cod auxiliar','codigo aux']);
+      const colNome = acharColuna(['descricao completa','descricao','nome','item','produto']);
+
+      if(!colCodProduto || !colNome){
+        alert('Não encontrei as colunas necessárias na planilha.\nEsperado: "Código Produto" e "Descrição Completa" (ou variações).\nColunas encontradas: ' + colunas.join(', '));
+        return;
+      }
+
+      const normalizarBlank = v => (v.toLowerCase() === '(blank)' ? '' : v);
+
+      baseItens = linhas
+        .map(l => ({
+          codProduto: normalizarBlank(String(l[colCodProduto]).trim()),
+          codAuxiliar: colCodAuxiliar ? normalizarBlank(String(l[colCodAuxiliar]).trim()) : '',
+          nome: String(l[colNome]).trim()
+        }))
+        .filter(l => (l.codProduto || l.codAuxiliar) && l.nome);
+
+      localStorage.setItem(BASE_KEY, JSON.stringify(baseItens));
+      atualizarBaseStatus();
+      toast(`Base carregada: ${baseItens.length} itens`);
+    }catch(err){
+      alert('Erro ao ler a planilha. Confirme se é um .xlsx/.xls válido.');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  event.target.value = '';
+}
+
+function limparBase(){
+  if(baseItens.length === 0) return;
+  if(!confirm('Remover a base de dados carregada? (não afeta os itens já cadastrados no estoque)')) return;
+  baseItens = [];
+  localStorage.removeItem(BASE_KEY);
+  atualizarBaseStatus();
+  toast('Base removida');
+}
+
+function atualizarBaseStatus(){
+  const el = document.getElementById('baseStatus');
+  el.textContent = baseItens.length > 0
+    ? `✓ Base carregada: ${baseItens.length} itens`
+    : 'Nenhuma base carregada — o nome deve ser digitado manualmente.';
+}
+
+function autoPreencherPorCodigo(){
+  const codigo = document.getElementById('f-sku').value.trim();
+  if(!codigo || baseItens.length === 0) return;
+  const encontrado = baseItens.find(b => b.codProduto === codigo || b.codAuxiliar === codigo);
+  if(encontrado){
+    document.getElementById('f-nome').value = encontrado.nome;
+  }
 }
 
 function addItem(){
@@ -248,48 +342,59 @@ function editarQtdDireta(id, valor){
   salvar();
 }
 
-function editarEndereco(id){
+function editarItem(id){
   const item = dados.find(i => i.id === id);
   if(!item) return;
 
-  const novaEstante = prompt('Nova estante:', item.estante);
-  if(novaEstante === null) return; // cancelou
-  const novaPrateleira = prompt('Nova prateleira:', item.prateleira);
+  const novoNome = prompt('Nome do item:', item.nome);
+  if(novoNome === null) return; // cancelou
+  const novoSku = prompt('Código / SKU:', item.sku || '');
+  if(novoSku === null) return;
+  const novaEstante = prompt('Estante:', item.estante);
+  if(novaEstante === null) return;
+  const novaPrateleira = prompt('Prateleira:', item.prateleira);
   if(novaPrateleira === null) return;
+  const novaQtdStr = prompt('Quantidade:', item.qtd);
+  if(novaQtdStr === null) return;
 
+  const nomeT = novoNome.trim();
+  const skuT = novoSku.trim();
   const estanteT = novaEstante.trim();
   const prateleiraT = novaPrateleira.trim();
-  if(!estanteT || !prateleiraT){
-    toast('Estante e prateleira não podem ficar vazias');
+  const qtdT = parseInt(novaQtdStr);
+
+  if(!nomeT || !estanteT || !prateleiraT || isNaN(qtdT) || qtdT < 0){
+    toast('Dados inválidos. Nenhuma alteração foi salva.');
     return;
   }
 
-  const chaveNova = chaveItem(item.nome, estanteT, prateleiraT);
+  const chaveNova = chaveItem(nomeT, estanteT, prateleiraT);
   const chaveAtual = chaveItem(item.nome, item.estante, item.prateleira);
 
-  if(chaveNova === chaveAtual){
-    toast('Endereço sem alteração');
-    return;
+  // se nome/endereço mudou pra combinação que já existe em outro registro, oferece fundir
+  if(chaveNova !== chaveAtual){
+    const destino = dados.find(i => i.id !== id && chaveItem(i.nome, i.estante, i.prateleira) === chaveNova);
+    if(destino){
+      const fundir = confirm(
+        `Já existe "${nomeT}" em ${estanteT}/${prateleiraT} (qtd: ${destino.qtd}).\n\n` +
+        `Deseja somar a quantidade (${qtdT}) a esse local e remover este registro?`
+      );
+      if(!fundir) return;
+      destino.qtd += qtdT;
+      if(skuT) destino.sku = skuT;
+      dados = dados.filter(i => i.id !== id);
+      toast(`Quantidades somadas em ${estanteT}/${prateleiraT}`);
+      salvar();
+      return;
+    }
   }
 
-  // já existe o mesmo item no endereço de destino? oferece fundir quantidades
-  const destino = dados.find(i => i.id !== id && chaveItem(i.nome, i.estante, i.prateleira) === chaveNova);
-
-  if(destino){
-    const fundir = confirm(
-      `Já existe "${item.nome}" em ${estanteT}/${prateleiraT} (qtd: ${destino.qtd}).\n\n` +
-      `Deseja somar a quantidade (${item.qtd}) a esse local e remover o registro antigo?`
-    );
-    if(!fundir) return;
-    destino.qtd += item.qtd;
-    dados = dados.filter(i => i.id !== id);
-    toast(`Quantidades somadas em ${estanteT}/${prateleiraT}`);
-  } else {
-    item.estante = estanteT;
-    item.prateleira = prateleiraT;
-    toast(`Endereço atualizado para ${estanteT}/${prateleiraT}`);
-  }
-
+  item.nome = nomeT;
+  item.sku = skuT;
+  item.estante = estanteT;
+  item.prateleira = prateleiraT;
+  item.qtd = qtdT;
+  toast('Item atualizado');
   salvar();
 }
 
@@ -442,7 +547,7 @@ function render(){
       </td>
       <td>
         <div class="actions">
-          <button class="btn-warn" onclick="editarEndereco('${item.id}')">Editar local</button>
+          <button class="btn-warn" onclick="editarItem('${item.id}')">Editar item</button>
           <button class="btn-danger" onclick="removerItem('${item.id}')">Remover</button>
         </div>
       </td>
