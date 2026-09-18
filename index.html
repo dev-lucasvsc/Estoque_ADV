@@ -68,6 +68,16 @@
   }
   #fileInput{display:none;}
   .inline-edit{width:70px; padding:4px 6px; font-size:.8rem;}
+  .sugestoes-box{
+    position:relative; margin-top:4px; max-height:220px; overflow-y:auto;
+    border:1px solid var(--border); border-radius:6px; background:#0f1115;
+  }
+  .sugestao-item{
+    padding:8px 10px; font-size:.8rem; cursor:pointer; border-bottom:1px solid var(--border);
+  }
+  .sugestao-item:last-child{border-bottom:none;}
+  .sugestao-item:hover{background:#1c202a;}
+  .sugestao-item b{color:var(--accent);}
 </style>
 </head>
 <body>
@@ -81,12 +91,13 @@
   <div class="card">
     <h2>Adicionar / Somar item</h2>
 
-    <label>Código / SKU (bipar ou digitar)</label>
-    <input id="f-sku" placeholder="Ex: 7891234567890" oninput="autoPreencherPorCodigo()">
+    <label>Código / SKU (bipar ou digitar) ou parte do nome</label>
+    <input id="f-sku" placeholder="Ex: 7891234567890 ou SPTO794 ou CHAPAM" oninput="handleBuscaSku()" autocomplete="off">
+    <div id="sugestoes" class="sugestoes-box" style="display:none;"></div>
     <div id="baseStatus" class="sub" style="margin:4px 0 0;"></div>
 
     <label>Nome do item</label>
-    <input id="f-nome" placeholder="Ex: Parafuso M6" list="lista-nomes">
+    <input id="f-nome" placeholder="Ex: Parafuso M6" list="lista-nomes" oninput="handleBuscaNome()" autocomplete="off">
     <datalist id="lista-nomes"></datalist>
 
     <div class="row2">
@@ -257,14 +268,76 @@ function atualizarBaseStatus(){
     : 'Nenhuma base carregada — o nome deve ser digitado manualmente.';
 }
 
-function autoPreencherPorCodigo(){
-  const codigo = document.getElementById('f-sku').value.trim();
-  if(!codigo || baseItens.length === 0) return;
-  const encontrado = baseItens.find(b => b.codProduto === codigo || b.codAuxiliar === codigo);
-  if(encontrado){
-    document.getElementById('f-nome').value = encontrado.nome;
-  }
+function normalizarTexto(v){
+  return String(v || '').toLowerCase().trim()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
+
+let sugestoesAtuais = [];
+
+function buscarNaBase(query){
+  const q = normalizarTexto(query);
+  if(!q || q.length < 2 || baseItens.length === 0) return [];
+  return baseItens.filter(b => {
+    const cp = normalizarTexto(b.codProduto);
+    const ca = normalizarTexto(b.codAuxiliar);
+    const nome = normalizarTexto(b.nome);
+    return cp.includes(q) || ca.includes(q) || nome.includes(q);
+  }).slice(0, 8);
+}
+
+function renderSugestoes(lista){
+  sugestoesAtuais = lista;
+  const box = document.getElementById('sugestoes');
+  if(lista.length === 0){
+    box.style.display = 'none';
+    box.innerHTML = '';
+    return;
+  }
+  box.innerHTML = lista.map((b, i) => `
+    <div class="sugestao-item" onclick="selecionarSugestao(${i})">
+      <b>${escapeHtml(b.codProduto || b.codAuxiliar)}</b> — ${escapeHtml(b.nome)}
+    </div>
+  `).join('');
+  box.style.display = 'block';
+}
+
+function selecionarSugestao(i){
+  const b = sugestoesAtuais[i];
+  if(!b) return;
+  document.getElementById('f-sku').value = b.codProduto || b.codAuxiliar;
+  document.getElementById('f-nome').value = b.nome;
+  document.getElementById('sugestoes').style.display = 'none';
+  document.getElementById('f-estante').focus();
+}
+
+function handleBuscaSku(){
+  const valor = document.getElementById('f-sku').value.trim();
+
+  // se bater exato com um código (leitor de código de barras), preenche na hora
+  const exato = baseItens.find(b => b.codProduto === valor || b.codAuxiliar === valor);
+  if(exato){
+    document.getElementById('f-nome').value = exato.nome;
+    document.getElementById('sugestoes').style.display = 'none';
+    return;
+  }
+
+  renderSugestoes(buscarNaBase(valor));
+}
+
+function handleBuscaNome(){
+  const valor = document.getElementById('f-nome').value.trim();
+  renderSugestoes(buscarNaBase(valor));
+}
+
+// esconde sugestões ao clicar fora
+document.addEventListener('click', (e) => {
+  const box = document.getElementById('sugestoes');
+  if(!box) return;
+  if(!box.contains(e.target) && e.target.id !== 'f-sku' && e.target.id !== 'f-nome'){
+    box.style.display = 'none';
+  }
+});
 
 function addItem(){
   const nome = document.getElementById('f-nome').value.trim();
